@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "util.h"
+
 /* The dimensions of the window. */
 #define WINDOW_WIDTH 800
 #define WINDOW_HEIGHT 600
@@ -56,7 +58,7 @@ init_shaders ()
   const GLchar *vertex_shader_source = (GLchar *) load_file ("vertex_shader.glsl");
   const GLchar *fragment_shader_source = (GLchar *) load_file ("fragment_shader.glsl");
 
-  GLuint vertex_shader, fragment_shader, program_object;
+  GLuint vertex_shader, fragment_shader;
   GLint compilation_successful, link_successful, compiler_log_length,
         linker_log_length;
 
