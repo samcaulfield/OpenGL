@@ -44,7 +44,12 @@ load_file (char *file_name)
   return file_contents;
 }
 
-void
+/* Attempts to load, compile and link a vertex shader and a fragment shader into
+ * a program for OpenGL to use. If these operations are unsuccessful, the
+ * program will terminate with an error message. The vertex shader must be
+ * called vertex_shader.glsl and the fragment shader must be called
+ * fragment_shader.glsl. */
+static void
 init_shaders ()
 {
   /* Load the shader source into buffers. */
