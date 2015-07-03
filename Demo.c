@@ -1,11 +1,20 @@
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
+
+#include <assert.h>
+#include <inttypes.h>
 #include <math.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 
-#define DEG_TO_RAD(x) (x * 0.0174532925)
+#include "sc_mat4f.h"
+#include "sc_vecf.h"
+#include "sc_vec4f.h"
+
+//#define DEBUG
+
+#define RAD(x) (x * 0.0174532925)
 
 static const GLchar *fragment_shader_source =
 {
@@ -139,142 +148,263 @@ int32_t main(int32_t num_args, uint8_t args)
 		glDeleteShader(fragment_shader_id);
 		glDeleteShader(vertex_shader_id);
 		glfwTerminate();
-		return EXIT_FAILURE;	
-
+		return EXIT_FAILURE;
 	}
 
 	glUseProgram(program_id);
 
-	/* Define an axis-aligned unit cube centered at the origin. */
-	GLfloat vertices[] =
+	/* Define a three-dimensional grid of uniformly-spaced points (voxels). */
+	#define NUM_VOXELS_X 100
+	#define NUM_VOXELS_Y 100
+	#define NUM_VOXELS_Z 100
+	#define COMPONENTS_PER_VERTEX 4
+
+	uint8_t voxels[NUM_VOXELS_X][NUM_VOXELS_Y][NUM_VOXELS_Z] =
 	{
-		/* Front. */
-		-0.5f, 0.5f, -0.5f, 1.0f,
-		0.5f, 0.5f, -0.5f, 1.0f,
-		-0.5f, -0.5f, -0.5f, 1.0f,
-		0.5f, 0.5f, -0.5f, 1.0f,
-		0.5f, -0.5f, -0.5f, 1.0f,
-		-0.5f, -0.5f, -0.5f, 1.0f,
-
-		/* Right. */
-		0.5f, 0.5f, -0.5f, 1.0f,
-		0.5f, 0.5f, 0.5f, 1.0f,
-		0.5f, -0.5f, -0.5f, 1.0f,
-		0.5f, 0.5f, 0.5f, 1.0f,
-		0.5f, -0.5f, 0.5f, 1.0f,
-		0.5f, -0.5f, -0.5f, 1.0f,
-
-		/* Bottom. */
-		-0.5f, -0.5f, -0.5f, 1.0f,
-		0.5f, -0.5f, -0.5f, 1.0f,
-		-0.5f, -0.5f, 0.5f, 1.0f,
-		0.5f, -0.5f, -0.5f, 1.0f,
-		0.5f, -0.5f, 0.5f, 1.0f,
-		-0.5f, -0.5f, 0.5f, 1.0f,
-
-		/* Top. */
-		-0.5f, 0.5f, -0.5f, 1.0f,
-		0.5f, 0.5f, -0.5f, 1.0f,
-		-0.5f, 0.5f, 0.5f, 1.0f,
-		0.5f, 0.5f, -0.5f, 1.0f,
-		0.5f, 0.5f, 0.5f, 1.0f,
-		-0.5f, 0.5f, 0.5f, 1.0f,
-
-		/* Left. */
-		-0.5f, 0.5f, -0.5f, 1.0f,
-		-0.5f, 0.5f, 0.5f, 1.0f,
-		-0.5f, -0.5f, -0.5f, 1.0f,
-		-0.5f, 0.5f, 0.5f, 1.0f,
-		-0.5f, -0.5f, 0.5f, 1.0f,
-		-0.5f, -0.5f, -0.5f, 1.0f,
-
-		/* Back. */
-		-0.5f, 0.5f, 0.5f, 1.0f,
-		0.5f, 0.5f, 0.5f, 1.0f,
-		-0.5f, -0.5f, 0.5f, 1.0f,
-		0.5f, 0.5f, 0.5f, 1.0f,
-		0.5f, -0.5f, 0.5f, 1.0f,
-		-0.5f, -0.5f, 0.5f, 1.0f,
+		0
 	};
 
-	GLfloat colours[] =
+	sc_vecf *vertex_buffer, *colour_buffer;
 	{
-		0.0f, 1.0f, 0.0f, 1.0f,
-		0.0f, 1.0f, 0.0f, 1.0f,
-		0.0f, 1.0f, 0.0f, 1.0f,
-		0.0f, 1.0f, 0.0f, 1.0f,
-		0.0f, 1.0f, 0.0f, 1.0f,
-		0.0f, 1.0f, 0.0f, 1.0f,
+		float *initial_vertex_buffer = malloc(64 * sizeof *initial_vertex_buffer);
+		vertex_buffer = sc_vecf_new(initial_vertex_buffer, 0, 64, 64);
 
-		0.0f, 0.0f, 1.0f, 1.0f,
-		0.0f, 0.0f, 1.0f, 1.0f,
-		0.0f, 0.0f, 1.0f, 1.0f,
-		0.0f, 0.0f, 1.0f, 1.0f,
-		0.0f, 0.0f, 1.0f, 1.0f,
-		0.0f, 0.0f, 1.0f, 1.0f,
+		float *initial_colour_buffer = malloc(64 * sizeof *initial_colour_buffer);
+		colour_buffer = sc_vecf_new(initial_colour_buffer, 0, 64, 64);
 
-		1.0f, 1.0f, 0.0f, 1.0f,
-		1.0f, 1.0f, 0.0f, 1.0f,
-		1.0f, 1.0f, 0.0f, 1.0f,
-		1.0f, 1.0f, 0.0f, 1.0f,
-		1.0f, 1.0f, 0.0f, 1.0f,
-		1.0f, 1.0f, 0.0f, 1.0f,
+		if (!initial_vertex_buffer || !vertex_buffer
+			|| !initial_colour_buffer || !colour_buffer) {
+			printf("Memory allocation error.\n");
+			return EXIT_FAILURE;
+		}
+	}
 
-		1.0f, 0.0f, 1.0f, 1.0f,
-		1.0f, 0.0f, 1.0f, 1.0f,
-		1.0f, 0.0f, 1.0f, 1.0f,
-		1.0f, 0.0f, 1.0f, 1.0f,
-		1.0f, 0.0f, 1.0f, 1.0f,
-		1.0f, 0.0f, 1.0f, 1.0f,
+	{
+		int32_t x, y, z;
+		for (x = 0; x < NUM_VOXELS_X; x++)
+			for (y = 0; y < NUM_VOXELS_Y; y++)
+				for (z = 0; z < NUM_VOXELS_Z; z++)
+					voxels[x][y][z] = 1;
+	}
 
-		0.0f, 1.0f, 1.0f, 1.0f,
-		0.0f, 1.0f, 1.0f, 1.0f,
-		0.0f, 1.0f, 1.0f, 1.0f,
-		0.0f, 1.0f, 1.0f, 1.0f,
-		0.0f, 1.0f, 1.0f, 1.0f,
-		0.0f, 1.0f, 1.0f, 1.0f,
+	int32_t x, y, z;
 
-		1.0f, 0.0f, 0.0f, 1.0f,
-		1.0f, 0.0f, 0.0f, 1.0f,
-		1.0f, 0.0f, 0.0f, 1.0f,
-		1.0f, 0.0f, 0.0f, 1.0f,
-		1.0f, 0.0f, 0.0f, 1.0f,
-		1.0f, 0.0f, 0.0f, 1.0f
-	};
+	#define add_x_quad(offset) \
+		do { \
+			sc_vecf_append(vertex_buffer, x + (offset)); \
+			sc_vecf_append(vertex_buffer, y - 0.5f); \
+			sc_vecf_append(vertex_buffer, z + 0.5f); \
+			sc_vecf_append(vertex_buffer, 1.0f); \
+			sc_vecf_append(vertex_buffer, x + (offset)); \
+			sc_vecf_append(vertex_buffer, y + 0.5f); \
+			sc_vecf_append(vertex_buffer, z + 0.5f); \
+			sc_vecf_append(vertex_buffer, 1.0f); \
+			sc_vecf_append(vertex_buffer, x + (offset)); \
+			sc_vecf_append(vertex_buffer, y + 0.5f); \
+			sc_vecf_append(vertex_buffer, z - 0.5f); \
+			sc_vecf_append(vertex_buffer, 1.0f); \
+			sc_vecf_append(vertex_buffer, x + (offset)); \
+			sc_vecf_append(vertex_buffer, y + 0.5f); \
+			sc_vecf_append(vertex_buffer, z - 0.5f); \
+			sc_vecf_append(vertex_buffer, 1.0f); \
+			sc_vecf_append(vertex_buffer, x + (offset)); \
+			sc_vecf_append(vertex_buffer, y - 0.5f); \
+			sc_vecf_append(vertex_buffer, z - 0.5f); \
+			sc_vecf_append(vertex_buffer, 1.0f); \
+			sc_vecf_append(vertex_buffer, x + (offset)); \
+			sc_vecf_append(vertex_buffer, y - 0.5f); \
+			sc_vecf_append(vertex_buffer, z + 0.5f); \
+			sc_vecf_append(vertex_buffer, 1.0f); \
+			int32_t i; \
+			for (i = 0; i < 6; i++) { \
+				sc_vecf_append(colour_buffer, 0.0f); \
+				sc_vecf_append(colour_buffer, 1.0f); \
+				sc_vecf_append(colour_buffer, 0.0f); \
+				sc_vecf_append(colour_buffer, 1.0f); \
+			} \
+		} while (0)
 
-	GLuint cbo, vao, vbo;
+	#define add_y_quad(offset) \
+		do { \
+			sc_vecf_append(vertex_buffer, x - 0.5f); \
+			sc_vecf_append(vertex_buffer, y + (offset)); \
+			sc_vecf_append(vertex_buffer, z + 0.5f); \
+			sc_vecf_append(vertex_buffer, 1.0f); \
+			sc_vecf_append(vertex_buffer, x + 0.5f ); \
+			sc_vecf_append(vertex_buffer, y + (offset)); \
+			sc_vecf_append(vertex_buffer, z + 0.5f); \
+			sc_vecf_append(vertex_buffer, 1.0f); \
+			sc_vecf_append(vertex_buffer, x + 0.5f); \
+			sc_vecf_append(vertex_buffer, y + (offset)); \
+			sc_vecf_append(vertex_buffer, z - 0.5f); \
+			sc_vecf_append(vertex_buffer, 1.0f); \
+			sc_vecf_append(vertex_buffer, x + 0.5f); \
+			sc_vecf_append(vertex_buffer, y + (offset)); \
+			sc_vecf_append(vertex_buffer, z - 0.5f); \
+			sc_vecf_append(vertex_buffer, 1.0f); \
+			sc_vecf_append(vertex_buffer, x - 0.5f); \
+			sc_vecf_append(vertex_buffer, y + (offset)); \
+			sc_vecf_append(vertex_buffer, z - 0.5f); \
+			sc_vecf_append(vertex_buffer, 1.0f); \
+			sc_vecf_append(vertex_buffer, x - 0.5f); \
+			sc_vecf_append(vertex_buffer, y + (offset)); \
+			sc_vecf_append(vertex_buffer, z + 0.5f); \
+			sc_vecf_append(vertex_buffer, 1.0f); \
+			int32_t i; \
+			for (i = 0; i < 6; i++) { \
+				sc_vecf_append(colour_buffer, 0.0f); \
+				sc_vecf_append(colour_buffer, 1.0f); \
+				sc_vecf_append(colour_buffer, 0.0f); \
+				sc_vecf_append(colour_buffer, 1.0f); \
+			} \
+		} while (0)
 
-	glGenVertexArrays(1, &vao);
-	glBindVertexArray(vao);
+	#define add_z_quad(offset) \
+		do { \
+			sc_vecf_append(vertex_buffer, x - 0.5f); \
+			sc_vecf_append(vertex_buffer, y + 0.5f); \
+			sc_vecf_append(vertex_buffer, z + (offset)); \
+			sc_vecf_append(vertex_buffer, 1.0f); \
+			sc_vecf_append(vertex_buffer, x + 0.5f ); \
+			sc_vecf_append(vertex_buffer, y + 0.5f); \
+			sc_vecf_append(vertex_buffer, z + (offset)); \
+			sc_vecf_append(vertex_buffer, 1.0f); \
+			sc_vecf_append(vertex_buffer, x + 0.5f); \
+			sc_vecf_append(vertex_buffer, y - 0.5f); \
+			sc_vecf_append(vertex_buffer, z + (offset)); \
+			sc_vecf_append(vertex_buffer, 1.0f); \
+			sc_vecf_append(vertex_buffer, x + 0.5f); \
+			sc_vecf_append(vertex_buffer, y - 0.5f); \
+			sc_vecf_append(vertex_buffer, z + (offset)); \
+			sc_vecf_append(vertex_buffer, 1.0f); \
+			sc_vecf_append(vertex_buffer, x - 0.5f); \
+			sc_vecf_append(vertex_buffer, y - 0.5f); \
+			sc_vecf_append(vertex_buffer, z + (offset)); \
+			sc_vecf_append(vertex_buffer, 1.0f); \
+			sc_vecf_append(vertex_buffer, x - 0.5f); \
+			sc_vecf_append(vertex_buffer, y + 0.5f); \
+			sc_vecf_append(vertex_buffer, z + (offset)); \
+			sc_vecf_append(vertex_buffer, 1.0f); \
+			int32_t i; \
+			for (i = 0; i < 6; i++) { \
+				sc_vecf_append(colour_buffer, 0.0f); \
+				sc_vecf_append(colour_buffer, 1.0f); \
+				sc_vecf_append(colour_buffer, 0.0f); \
+				sc_vecf_append(colour_buffer, 1.0f); \
+			} \
+		} while (0)
 
-	glGenBuffers(1, &vbo);
-	glBindBuffer(GL_ARRAY_BUFFER, vbo);
-	glBufferData(GL_ARRAY_BUFFER, sizeof vertices, vertices, GL_STATIC_DRAW);
+	for (x = 0; x < NUM_VOXELS_X; x++) {
+		for (y = 0; y < NUM_VOXELS_Y; y++) {
+			for (z = 0; z < NUM_VOXELS_Z; z++) {
+				if (voxels[x][y][z]) {
+					if (!x) /* Do left. */
+						add_x_quad(-0.5f);
+
+					if (!y) /* Do bottom. */
+						add_y_quad(-0.5f);
+
+					if (!z) /* Do back. */
+						add_z_quad(-0.5f);
+
+					if (x == NUM_VOXELS_X - 1 || (voxels[x][y][z] != voxels[x + 1][y][z])) /* Do right. */
+						add_x_quad(0.5f);
+
+					if (y == NUM_VOXELS_Y - 1 || voxels[x][y][z] != voxels[x][y + 1][z]) /* Do top. */
+						add_y_quad(0.5f);
+
+					if (z == NUM_VOXELS_Z - 1 || voxels[x][y][z] != voxels[x][y][z + 1]) /* Do front. */
+						add_z_quad(0.5f);
+				}
+			}
+		}
+	}
+
+	printf("Vertex buffer index: %" PRIu64 ".\n", vertex_buffer->index);
+	printf("Colour buffer index: %" PRIu64 ".\n", colour_buffer->index);
+	printf("Vertex buffer size: %" PRIu64 ".\n", vertex_buffer->size);
+	printf("Colour buffer size: %" PRIu64 ".\n", colour_buffer->size);
+
+	GLuint voxel_vao, voxel_vbo, voxel_cbo;
+
+	glGenVertexArrays(1, &voxel_vao);
+	glBindVertexArray(voxel_vao);
+
+	glGenBuffers(1, &voxel_vbo);
+	glBindBuffer(GL_ARRAY_BUFFER, voxel_vbo);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(float) * vertex_buffer->index, vertex_buffer->data, GL_STATIC_DRAW);
 	glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 0, 0);
 	glEnableVertexAttribArray(0);
 
-	glGenBuffers(1, &cbo);
-	glBindBuffer(GL_ARRAY_BUFFER, cbo);
-	glBufferData(GL_ARRAY_BUFFER, sizeof colours, colours, GL_STATIC_DRAW);
+	glGenBuffers(1, &voxel_cbo);
+	glBindBuffer(GL_ARRAY_BUFFER, voxel_cbo);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(float) * colour_buffer->index, colour_buffer->data, GL_STATIC_DRAW);
+	glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 0, 0);
+	glEnableVertexAttribArray(1);
+
+	uint32_t num_voxel_vertices = vertex_buffer->index / 4;
+
+	sc_vecf_free(vertex_buffer);
+	sc_vecf_free(colour_buffer);
+
+#ifdef DEBUG
+	float voxel_vertices[NUM_VOXELS_X * NUM_VOXELS_Y * NUM_VOXELS_Z * COMPONENTS_PER_VERTEX];
+	float voxel_colours[NUM_VOXELS_X * NUM_VOXELS_Y * NUM_VOXELS_Z * COMPONENTS_PER_VERTEX];
+
+	{
+		float x, y, z;
+		int32_t colours_i = 0, vertices_i = 0;
+
+		for (x = 0; x < NUM_VOXELS_X; x++) {
+			for (y = 0; y < NUM_VOXELS_Y; y++) {
+				for (z = 0; z < NUM_VOXELS_Z; z++) {
+					voxel_vertices[vertices_i++] = x;
+					voxel_vertices[vertices_i++] = y;
+					voxel_vertices[vertices_i++] = z;
+					voxel_vertices[vertices_i++] = 1.0f;
+
+					voxel_colours[colours_i++] = 1.0f;
+					voxel_colours[colours_i++] = 1.0f;
+					voxel_colours[colours_i++] = 1.0f;
+					voxel_colours[colours_i++] = 1.0f;
+				}
+			}
+		}
+	}
+
+	GLuint voxels_vao, voxels_vbo, voxels_cbo;
+
+	glGenVertexArrays(1, &voxels_vao);
+	glBindVertexArray(voxels_vao);
+
+	glGenBuffers(1, &voxels_vbo);
+	glBindBuffer(GL_ARRAY_BUFFER, voxels_vbo);
+	glBufferData(GL_ARRAY_BUFFER, sizeof voxel_vertices, voxel_vertices, GL_STATIC_DRAW);
+	glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 0, 0);
+	glEnableVertexAttribArray(0);
+
+	glGenBuffers(1, &voxels_cbo);
+	glBindBuffer(GL_ARRAY_BUFFER, voxels_cbo);
+	glBufferData(GL_ARRAY_BUFFER, sizeof voxel_colours, voxel_colours, GL_STATIC_DRAW);
 	glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 0, 0);
 	glEnableVertexAttribArray(1);
 
 	GLfloat axes[] =
 	{
 		0.0f, 0.0f, 0.0f, 1.0f,
-		1000.0f, 0.0f, 0.0f, 1.0f,
+		NUM_VOXELS_X - 1, 0.0f, 0.0f, 1.0f,
 
 		0.0f, 0.0f, 0.0f, 1.0f,
-		0.0f, 1000.0f, 0.0f, 1.0f,
+		0.0f, NUM_VOXELS_Y - 1, 0.0f, 1.0f,
 
 		0.0f, 0.0f, 0.0f, 1.0f,
-		0.0f, 0.0f, 1000.0f, 1.0f,
+		0.0f, 0.0f, NUM_VOXELS_Z - 1, 1.0f,
 	};
 
 	GLfloat axis_colours[] =
 	{
-		0.0f, 1.0f, 0.0f, 1.0f,
-		0.0f, 1.0f, 0.0f, 1.0f,
+		1.0f, 1.0f, 0.0f, 1.0f,
+		1.0f, 1.0f, 0.0f, 1.0f,
 
 		0.0f, 0.0f, 1.0f, 1.0f,
 		0.0f, 0.0f, 1.0f, 1.0f,
@@ -299,40 +429,9 @@ int32_t main(int32_t num_args, uint8_t args)
 	glBufferData(GL_ARRAY_BUFFER, sizeof axis_colours, axis_colours, GL_STATIC_DRAW);
 	glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 0, 0);
 	glEnableVertexAttribArray(1);
+#endif
 
-	GLfloat crosshair_vertices[] =
-	{
-		-0.1f, 0.1f, -1.1f, 1.0f,
-		0.1f, -0.1f, -1.1f, 1.0f,
-		0.1, 0.1, -1.1f, 1.0f,
-		-0.1, -0.1, -1.1f, 1.0f
-	};
-
-	GLfloat crosshair_colours[] =
-	{
-		0.0f, 1.0f, 0.0f, 0.5f,
-		0.0f, 1.0f, 0.0f, 0.5f,
-		0.0f, 1.0f, 0.0f, 0.5f,
-		0.0f, 1.0f, 0.0f, 0.5f
-	};
-
-	GLuint crosshair_vao, crosshair_vbo, crosshair_cbo;
-
-	glGenVertexArrays(1, &crosshair_vao);
-	glBindVertexArray(crosshair_vao);
-
-	glGenBuffers(1, &crosshair_vbo);
-	glBindBuffer(GL_ARRAY_BUFFER, crosshair_vbo);
-	glBufferData(GL_ARRAY_BUFFER, sizeof crosshair_vertices, crosshair_vertices, GL_STATIC_DRAW);
-	glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 0, 0);
-	glEnableVertexAttribArray(0);
-
-	glGenBuffers(1, &crosshair_cbo);
-	glBindBuffer(GL_ARRAY_BUFFER, crosshair_cbo);
-	glBufferData(GL_ARRAY_BUFFER, sizeof crosshair_colours, crosshair_colours, GL_STATIC_DRAW);
-	glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 0, 0);
-	glEnableVertexAttribArray(1);
-
+	/* Set up viewing information. */
 	float near = 1.0f, far = 1000.0f, left = -1.0f, right = 1.0f, bottom = -1.0f, top = 1.0f;
 	float a = (right + left) / (right - left);
 	float b = (top + bottom) / (top - bottom);
@@ -359,20 +458,12 @@ int32_t main(int32_t num_args, uint8_t args)
 		float movement_speed, rotation_speed;
 	} Camera;
 
-	Camera.x = 2;
-	Camera.y = 2;
-	Camera.z = 5;
+	Camera.x = NUM_VOXELS_X / 2.0f;
+	Camera.y = NUM_VOXELS_Y / 2.0f;
+	Camera.z = NUM_VOXELS_Z / 2.0f;
 	Camera.x_rotation = Camera.y_rotation = Camera.z_rotation = 0;
-	Camera.movement_speed = 0.1f;
-	Camera.rotation_speed = 2.0f;
-
-	float identity_matrix[] =
-	{
-		1.0f, 0.0f, 0.0f, 0.0f,
-		0.0f, 1.0f, 0.0f, 0.0f,
-		0.0f, 0.0f, 1.0f, 0.0f,
-		0.0f, 0.0f, 0.0f, 1.0f
-	};
+	Camera.movement_speed = 10.0f;
+	Camera.rotation_speed = 70.0f;
 
 	float camera_translation_matrix[] =
 	{
@@ -382,183 +473,199 @@ int32_t main(int32_t num_args, uint8_t args)
 		0.0f, 0.0f, 0.0f, 1.0f
 	};
 
-	float camera_x_rotation_matrix[] =
-	{
-		1.0f, 0.0f, 0.0f, 0.0f,
-		0.0f, 1.0f, 0.0f, 0.0f,
-		0.0f, 0.0f, 1.0f, 0.0f,
-		0.0f, 0.0f, 0.0f, 1.0f
-	};
-	
-	float camera_y_rotation_matrix[] =
-	{
-		1.0f, 0.0f, 0.0f, 0.0f,
-		0.0f, 1.0f, 0.0f, 0.0f,
-		0.0f, 0.0f, 1.0f, 0.0f,
-		0.0f, 0.0f, 0.0f, 1.0f
-	};
+	double current_frame_time = 0, delta, previous_frame_time;
 
-	float camera_z_rotation_matrix[] =
-	{
-		1.0f, 0.0f, 0.0f, 0.0f,
-		0.0f, 1.0f, 0.0f, 0.0f,
-		0.0f, 0.0f, 1.0f, 0.0f,
-		0.0f, 0.0f, 0.0f, 1.0f
-	};
-
-	/* Set up the voxel map. */
-	#define depth 64
-	#define height 8
-	#define width 64
-
-	uint8_t voxels[width][height][depth] =
-	{
-		0
-	};
-
-	voxels[30][4][30] = 1;
-
-	uint8_t x, y, z;
-
-	int32_t v_index = 0, c_index = 0;
-	float vertex_buffer[96];
-	float colour_buffer[96];
-
-	for (x = 1; x < width - 1; x++) {
-		for (y = 1; y < height - 1; y++) {
-			for (z = 1; z < depth - 1; z++) {
-				if (voxels[x][y][z] != voxels[x + 1][y][z]) {
-					vertex_buffer[v_index++] = x + 0.5f;
-					vertex_buffer[v_index++] = y + 0.5f;
-					vertex_buffer[v_index++] = z + 0.5f;
-					vertex_buffer[v_index++] = 1.0f;
-
-					vertex_buffer[v_index++] = x + 0.5f;
-					vertex_buffer[v_index++] = y + 0.5f;
-					vertex_buffer[v_index++] = z - 0.5f;
-					vertex_buffer[v_index++] = 1.0f;
-
-					vertex_buffer[v_index++] = x + 0.5f;
-					vertex_buffer[v_index++] = y - 0.5f;
-					vertex_buffer[v_index++] = z + 0.5f;
-					vertex_buffer[v_index++] = 1.0f;
-
-					vertex_buffer[v_index++] = x + 0.5f;
-					vertex_buffer[v_index++] = y - 0.5f;
-					vertex_buffer[v_index++] = z + 0.5f;
-					vertex_buffer[v_index++] = 1.0f;
-
-					vertex_buffer[v_index++] = x + 0.5f;
-					vertex_buffer[v_index++] = y - 0.5f;
-					vertex_buffer[v_index++] = z - 0.5f;
-					vertex_buffer[v_index++] = 1.0f;
-
-					vertex_buffer[v_index++] = x + 0.5f;
-					vertex_buffer[v_index++] = y + 0.5f;
-					vertex_buffer[v_index++] = z - 0.5f;
-					vertex_buffer[v_index++] = 1.0f;
-
-					int32_t i;
-					for (i = 0; i < 24; i++)
-						colour_buffer[c_index++] = 1.0f;
-				}
-			}
-		}
-	}
-
-	GLuint voxel_vao, voxel_vbo, voxel_cbo;
-
-	glGenVertexArrays(1, &voxel_vao);
-	glBindVertexArray(voxel_vao);
-
-	glGenBuffers(1, &voxel_vbo);
-	glBindBuffer(GL_ARRAY_BUFFER, voxel_vbo);
-	glBufferData(GL_ARRAY_BUFFER, sizeof vertex_buffer, vertex_buffer, GL_STATIC_DRAW);
-	glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 0, 0);
-	glEnableVertexAttribArray(0);
-
-	glGenBuffers(1, &voxel_cbo);
-	glBindBuffer(GL_ARRAY_BUFFER, voxel_cbo);
-	glBufferData(GL_ARRAY_BUFFER, sizeof colour_buffer, colour_buffer, GL_STATIC_DRAW);
-	glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 0, 0);
-	glEnableVertexAttribArray(1);
+	uint64_t frame = 0;
 
 	/* The main loop. */
 	while (!glfwWindowShouldClose(window))
 	{
-		/* Camera translation. */
-		if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
-			Camera.x += Camera.movement_speed * sin(DEG_TO_RAD(Camera.y_rotation));
-			Camera.y -= Camera.movement_speed * sin(DEG_TO_RAD(Camera.x_rotation));
-			Camera.z -= Camera.movement_speed * cos(DEG_TO_RAD(Camera.y_rotation));
-		}
-		if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) {
-			Camera.x -= Camera.movement_speed * cos(DEG_TO_RAD(Camera.y_rotation));
-			//Camera.z
-			Camera.z -= Camera.movement_speed * sin(DEG_TO_RAD(Camera.y_rotation));
-		}
-		if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) {
-			Camera.x -= Camera.movement_speed * sin(DEG_TO_RAD(Camera.y_rotation));
-			Camera.y += Camera.movement_speed * sin(DEG_TO_RAD(Camera.x_rotation));
-			Camera.z += Camera.movement_speed * cos(DEG_TO_RAD(Camera.y_rotation));
-		}
-		if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
-			Camera.x += Camera.movement_speed * cos(DEG_TO_RAD(Camera.y_rotation));
-			//Camera.z
-			Camera.z += Camera.movement_speed * sin(DEG_TO_RAD(Camera.y_rotation));
-		}
+		frame++;
 
-		if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS)
-			Camera.y += Camera.movement_speed;
-		if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS)
-			Camera.y -= Camera.movement_speed;
+		previous_frame_time = current_frame_time;
+		current_frame_time = glfwGetTime();
+		delta = current_frame_time - previous_frame_time;
+
+		if (frame >= 100 && glfwGetKey(window, GLFW_KEY_P) == GLFW_PRESS) {
+			printf("*---* Camera Details: *---*\n");
+			printf("*-* Camera.x: %f\n", Camera.x);
+			printf("*-* Camera.y: %f\n", Camera.y);
+			printf("*-* Camera.z: %f\n", Camera.z);
+			printf("*-* Camera.x_rotation: %f\n", Camera.x_rotation);
+			printf("*-* Camera.y_rotation: %f\n", Camera.y_rotation);
+			printf("*-* Camera.z_rotation: %f\n", Camera.z_rotation);
+			printf("*-------------------------*\n\n");
+			frame = 0;
+		}
 
 		/* Camera rotation. */
 		if (glfwGetKey(window, GLFW_KEY_H) == GLFW_PRESS)
-			Camera.y_rotation -= Camera.rotation_speed;
+			Camera.y_rotation += delta * Camera.rotation_speed;
 		if (glfwGetKey(window, GLFW_KEY_J) == GLFW_PRESS)
-			Camera.x_rotation += Camera.rotation_speed;
+			Camera.x_rotation -= delta * Camera.rotation_speed;
 		if (glfwGetKey(window, GLFW_KEY_K) == GLFW_PRESS)
-			Camera.x_rotation -= Camera.rotation_speed;
+			Camera.x_rotation += delta * Camera.rotation_speed;
 		if (glfwGetKey(window, GLFW_KEY_L) == GLFW_PRESS)
-			Camera.y_rotation += Camera.rotation_speed;
+			Camera.y_rotation -= delta * Camera.rotation_speed;
+
+		if (Camera.x_rotation >= 360.0f)
+			Camera.x_rotation -= 360.0f;
+		if (Camera.x_rotation <= -360.0f)
+			Camera.x_rotation += 360.0f;
+
+		if (Camera.y_rotation >= 360.0f)
+			Camera.y_rotation -= 360.0f;
+		if (Camera.y_rotation <= -360.0f)
+			Camera.y_rotation += 360.0f;
+
+		/* Compute move vector from camera orientation */
+		float x_rotation_data[] =
+		{
+			1.0f, 0.0f, 0.0f, 0.0f,
+			0.0f, cos(RAD(Camera.x_rotation)), -sin(RAD(Camera.x_rotation)), 0.0f,
+			0.0f, sin(RAD(Camera.x_rotation)), cos(RAD(Camera.x_rotation)), 0.0f,
+			0.0f, 0.0f, 0.0f, 1.0f
+		};
+
+		float y_rotation_data[] =
+		{
+			cos(RAD(Camera.y_rotation)), 0.0f, sin(RAD(Camera.y_rotation)), 0.0f,
+			0.0f, 1.0f, 0.0f, 0.0f,
+			-sin(RAD(Camera.y_rotation)), 0.0f, cos(RAD(Camera.y_rotation)), 0.0f,
+			0.0f, 0.0f, 0.0f, 1.0f
+		};
+
+		float z_rotation_data[] =
+		{
+			cos(RAD(Camera.z_rotation)), -sin(RAD(Camera.z_rotation)), 0.0f, 0.0f,
+			sin(RAD(Camera.z_rotation)), cos(RAD(Camera.z_rotation)), 0.0f, 0.0f,
+			0.0f, 0.0f, 1.0f, 0.0f,
+			0.0f, 0.0f, 0.0f, 1.0f
+		};
+
+		/* A move vector for the forward direction. */
+		sc_vec4f forward_move_vector =
+		{
+			.x = 0.0f, .y = 0.0f, .z = -Camera.movement_speed, .w = 1.0f
+		};
+
+		sc_vec4f left_move_vector =
+		{
+			.x = -Camera.movement_speed, .y = 0.0f, .z = 0.0f, .w = 1.0f
+		};
+
+		sc_vec4f up_move_vector =
+		{
+			.x = 0.0f, .y = Camera.movement_speed, .z = 0.0f, .w = 1.0f
+		};
+
+		sc_vec4f x_result_vector, y_result_vector, z_result_vector, result_vector;
+
+		sc_mat4f *x_rotation_mat = sc_mat4f_new(x_rotation_data);
+		assert(x_rotation_mat);
+
+		sc_mat4f *y_rotation_mat = sc_mat4f_new(y_rotation_data);
+		assert(y_rotation_mat);
+
+		sc_mat4f *z_rotation_mat = sc_mat4f_new(z_rotation_data);
+		assert(z_rotation_mat);
+
+		/* Camera translation. */
+		if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
+			sc_mat4f_mulv(x_rotation_mat, &forward_move_vector, &x_result_vector);
+			sc_mat4f_mulv(y_rotation_mat, &x_result_vector, &result_vector);
+
+			Camera.x += delta * result_vector.x;
+			Camera.y += delta * result_vector.y;
+			Camera.z += delta * result_vector.z;
+		}
+		if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) {
+			sc_mat4f_mulv(x_rotation_mat, &left_move_vector, &x_result_vector);
+			sc_mat4f_mulv(y_rotation_mat, &x_result_vector, &result_vector);
+
+			Camera.x += delta * result_vector.x;
+			Camera.y += delta * result_vector.y;
+			Camera.z += delta * result_vector.z;
+		}
+		if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) {
+			sc_mat4f_mulv(x_rotation_mat, &forward_move_vector, &x_result_vector);
+			sc_mat4f_mulv(y_rotation_mat, &x_result_vector, &result_vector);
+
+			Camera.x -= delta * result_vector.x;
+			Camera.y -= delta * result_vector.y;
+			Camera.z -= delta * result_vector.z;
+
+		}
+		if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
+			sc_mat4f_mulv(x_rotation_mat, &left_move_vector, &x_result_vector);
+			sc_mat4f_mulv(y_rotation_mat, &x_result_vector, &result_vector);
+
+			Camera.x -= delta * result_vector.x;
+			Camera.y -= delta * result_vector.y;
+			Camera.z -= delta * result_vector.z;
+		}
+		if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS) {
+			sc_mat4f_mulv(x_rotation_mat, &up_move_vector, &x_result_vector);
+			sc_mat4f_mulv(y_rotation_mat, &x_result_vector, &result_vector);
+
+			Camera.x += delta * result_vector.x;
+			Camera.y += delta * result_vector.y;
+			Camera.z += delta * result_vector.z;
+		}
+//		if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS)
+//			Camera.y -= delta * Camera.movement_speed;
+
+
+		free(x_rotation_mat);
+		free(y_rotation_mat);
+		free(z_rotation_mat);
 
 		camera_translation_matrix[3] = -Camera.x;
 		camera_translation_matrix[7] = -Camera.y;
 		camera_translation_matrix[11] = -Camera.z;
 
-		camera_x_rotation_matrix[5] = cos(DEG_TO_RAD(Camera.x_rotation));
-		camera_x_rotation_matrix[6] = -sin(DEG_TO_RAD(Camera.x_rotation));
-		camera_x_rotation_matrix[9] = sin(DEG_TO_RAD(Camera.x_rotation));
-		camera_x_rotation_matrix[10] = cos(DEG_TO_RAD(Camera.x_rotation));
+		float x_rotation_inverse[] =
+		{
+			1.0f, 0.0f, 0.0f, 0.0f,
+			0.0f, cos(RAD(-Camera.x_rotation)), -sin(RAD(-Camera.x_rotation)), 0.0f,
+			0.0f, sin(RAD(-Camera.x_rotation)), cos(RAD(-Camera.x_rotation)), 0.0f,
+			0.0f, 0.0f, 0.0f, 1.0f
+		};
 
-		camera_y_rotation_matrix[0] = cos(DEG_TO_RAD(Camera.y_rotation));
-		camera_y_rotation_matrix[2] = sin(DEG_TO_RAD(Camera.y_rotation));
-		camera_y_rotation_matrix[8] = -sin(DEG_TO_RAD(Camera.y_rotation));
-		camera_y_rotation_matrix[10] = cos(DEG_TO_RAD(Camera.y_rotation));
+		float y_rotation_inverse[] =
+		{
+			cos(RAD(-Camera.y_rotation)), 0.0f, sin(RAD(-Camera.y_rotation)), 0.0f,
+			0.0f, 1.0f, 0.0f, 0.0f,
+			-sin(RAD(-Camera.y_rotation)), 0.0f, cos(RAD(-Camera.y_rotation)), 0.0f,
+			0.0f, 0.0f, 0.0f, 1.0f
+		};
 
-		glUniformMatrix4fv(glGetUniformLocation(program_id, "camera_translation_matrix"), 1, GL_TRUE, camera_translation_matrix);
+		glUniformMatrix4fv(
+			glGetUniformLocation(program_id, "camera_translation_matrix"),
+			1, GL_TRUE, camera_translation_matrix);
 
-		glUniformMatrix4fv(glGetUniformLocation(program_id, "camera_x_rotation_matrix"), 1, GL_TRUE, camera_x_rotation_matrix);
-		glUniformMatrix4fv(glGetUniformLocation(program_id, "camera_y_rotation_matrix"), 1, GL_TRUE, camera_y_rotation_matrix);
+		glUniformMatrix4fv(
+			glGetUniformLocation(program_id, "camera_x_rotation_matrix"),
+			1, GL_TRUE, x_rotation_inverse);
+
+		glUniformMatrix4fv(
+			glGetUniformLocation(program_id, "camera_y_rotation_matrix"),
+			1, GL_TRUE, y_rotation_inverse);
 
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-		glBindVertexArray(vao);
-		glDrawArrays(GL_TRIANGLES, 0, 36);
-
+#ifdef DEBUG
 		glBindVertexArray(axes_vao);
 		glDrawArrays(GL_LINES, 0, 6);
 
+		glBindVertexArray(voxels_vao);
+		glDrawArrays(GL_POINTS, 0, NUM_VOXELS_X * NUM_VOXELS_Y * NUM_VOXELS_Z);
+#endif
+
+		glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 		glBindVertexArray(voxel_vao);
-		glDrawArrays(GL_TRIANGLES, 0, 12);
-
-		glUniformMatrix4fv(glGetUniformLocation(program_id, "camera_translation_matrix"), 1, GL_TRUE, identity_matrix);
-		glUniformMatrix4fv(glGetUniformLocation(program_id, "camera_x_rotation_matrix"), 1, GL_TRUE, identity_matrix);
-		glUniformMatrix4fv(glGetUniformLocation(program_id, "camera_y_rotation_matrix"), 1, GL_TRUE, identity_matrix);
-
-		glBindVertexArray(crosshair_vao);
-		glDrawArrays(GL_LINES, 0, 4);
+		glDrawArrays(GL_TRIANGLES, 0, num_voxel_vertices);
+		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 
 		glfwSwapBuffers(window);
 		glfwPollEvents();
